@@ -1,5 +1,5 @@
 {
-  description = "pi-fowler — pi coding agent with the Firecrawl extension baked in";
+  description = "pi-fowler — pi coding agent with a self-hosted Firecrawl extension baked in";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -17,56 +17,47 @@
             config.allowUnfree = true;
           };
         });
+
+    # Self-hosted Firecrawl from shockwaves-lab/searxng-firecrawl.
+    # No Firecrawl API key is needed (USE_DB_AUTHENTICATION=false).
+    # Override at runtime with FIRECRAWL_API_URL.
+    firecrawlUrl = "http://firecrawl.nemesis.home.arpa";
   in {
     packages = forAllSystems ({pkgs, ...}: let
-      pi-firecrawl = pkgs.buildNpmPackage {
-        pname = "pi-firecrawl";
-        version = "0.1.0";
-
-        src = pkgs.fetchFromGitHub {
-          owner = "firecrawl";
-          repo = "pi-firecrawl";
-          rev = "2d7e8966ad63744fa7d5932f7bd5b4a78eddb894";
-          hash = "sha256-1jbWRlQh72qoGUf2Bl220ZGKVzH/AsDgrS9weGgxb2I=";
-        };
-
-        npmDepsHash = "sha256-+ox5eIPBF9eY0yPw5IL4LypRSxZ1sz8JCFaDjmZ2DuU=";
-
-        # Only the runtime dep tree is needed; peer deps are supplied by pi.
-        npmFlags = ["--omit=dev" "--legacy-peer-deps"];
-
-        # No compilation step for this package; install as-is.
-        dontNpmBuild = true;
-
-        installPhase = ''
-          runHook preInstall
-          mkdir -p $out/lib/node_modules/pi-firecrawl
-          cp -r . $out/lib/node_modules/pi-firecrawl
-
-          cd $out/lib/node_modules/pi-firecrawl
-          mkdir -p extensions
-          mv src/index.ts extensions/firecrawl.ts
-          rmdir src
-
-          substituteInPlace package.json \
-            --replace-fail '"./src/index.ts"' '"./extensions/firecrawl.ts"' \
-            --replace-fail '"src",' '"extensions",'
-
-          runHook postInstall
-        '';
-
+      # Vendored extension. It has no npm runtime dependencies (it talks to
+      # the Firecrawl HTTP API with fetch and uses pi's bundled peer deps),
+      # so it is installed as a plain pi package rather than via npm.
+      pi-firecrawl = pkgs.runCommand "pi-firecrawl-0.2.0" {
         meta = {
-          description = "Official Firecrawl extension for the Pi coding agent";
+          description = "Firecrawl extension for pi backed by a self-hosted Firecrawl + SearXNG stack";
           homepage = "https://github.com/firecrawl/pi-firecrawl";
           license = pkgs.lib.licenses.mit;
         };
-      };
+      } ''
+        mkdir -p $out/lib/node_modules/pi-firecrawl/extensions
+        cp ${./extensions/firecrawl.ts} $out/lib/node_modules/pi-firecrawl/extensions/firecrawl.ts
+
+        cat > $out/lib/node_modules/pi-firecrawl/package.json <<'JSON'
+        {
+          "name": "pi-firecrawl",
+          "version": "0.2.0",
+          "type": "module",
+          "keywords": ["pi-package"],
+          "pi": { "extensions": ["./extensions"] }
+        }
+        JSON
+      '';
 
       pi-fowler = pkgs.writeShellApplication {
         name = "pi";
         runtimeInputs = [pkgs.nodejs];
         text = ''
           export PI_CODING_AGENT_DIR="''${PI_FOWLER_AGENT_DIR:-$HOME/pi-fowler/agent}"
+
+          # Point the Firecrawl extension at the self-hosted instance. An
+          # explicitly exported FIRECRAWL_API_URL is respected.
+          : "''${FIRECRAWL_API_URL:=${firecrawlUrl}}"
+          export FIRECRAWL_API_URL
 
           exec ${pkgs.pi-coding-agent}/bin/pi \
             --extension ${pi-firecrawl}/lib/node_modules/pi-firecrawl \
@@ -76,7 +67,7 @@
         meta =
           pkgs.pi-coding-agent.meta
           // {
-            description = "Pi coding agent with the Firecrawl extension preinstalled and a version-controlled agent directory";
+            description = "Pi coding agent with a self-hosted Firecrawl extension preinstalled and a version-controlled agent directory";
             mainProgram = "pi";
           };
       };

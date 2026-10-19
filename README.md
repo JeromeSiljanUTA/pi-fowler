@@ -1,8 +1,8 @@
 # pi-fowler
 
-A Nix flake that packages the **pi coding agent** (latest unstable) with the
-official **Firecrawl extension** baked in, so `pi` is ready to scrape, crawl,
-map, search, and extract from the web out of the box.
+A Nix flake that packages the **pi coding agent** (latest unstable) with a
+**self-hosted Firecrawl extension** baked in, wired to the Firecrawl + SearXNG
+stack in `shockwaves-lab/searxng-firecrawl`. No Firecrawl API key is required.
 
 ## What it ships
 
@@ -17,14 +17,19 @@ map, search, and extract from the web out of the box.
 ## How it works
 
 - `pi-coding-agent` is taken from `nixpkgs/nixos-unstable`.
-- `firecrawl/pi-firecrawl` is fetched from GitHub and installed with its
-  runtime dependency (`@mendable/firecrawl-js`).
-- The upstream `src/index.ts` entry point is relocated to
-  `extensions/firecrawl.ts`, so pi lists the extension as `firecrawl.ts`
-  rather than the unhelpful `src/index.ts`.
-- The `pi` binary is wrapped so that `PI_CODING_AGENT_DIR` points at a
-  version-controlled `agent/` directory instead of `~/.pi/agent`, and so that
-  `--extension <pi-firecrawl>` is injected on every invocation.
+- The Firecrawl extension is vendored at `extensions/firecrawl.ts` (synced
+  from `shockwaves-lab/searxng-firecrawl/firecrawl.pi-extension.ts`). It talks
+  to the self-hosted Firecrawl HTTP API with `fetch`, uses only pi's bundled
+  peer dependencies, and therefore has no npm runtime dependencies — it is
+  installed as a plain pi package instead of via `npm`.
+- The extension registers `firecrawl_scrape` and `firecrawl_search`. Search is
+  backed by SearXNG in the `searxng-firecrawl` stack.
+- The `pi` binary is wrapped so that:
+  - `PI_CODING_AGENT_DIR` points at a version-controlled `agent/` directory
+    instead of `~/.pi/agent`;
+  - `--extension <pi-firecrawl>` is injected on every invocation;
+  - `FIRECRAWL_API_URL` defaults to the self-hosted instance (an explicitly
+    exported value is respected).
 
 ## Usage
 
@@ -84,29 +89,27 @@ Credentials, model cache, sessions, and logs are listed in `.gitignore`, so
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `FIRECRAWL_API_KEY` | _(required by the extension)_ | Firecrawl API key. |
-| `FIRECRAWL_API_URL` | `https://api.firecrawl.dev` | Point at a self-hosted Firecrawl instance. |
-| `FIRECRAWL_TIMEOUT_MS` | SDK default | Per-request timeout. |
-| `FIRECRAWL_MAX_RETRIES` | SDK default | Retry budget. |
+| `FIRECRAWL_API_URL` | `http://firecrawl.nemesis.home.arpa` | Base URL of the self-hosted Firecrawl API. Set by the wrapper unless already exported. |
+| `FIRECRAWL_API_KEY` | _(unused)_ | Not required — the stack runs with `USE_DB_AUTHENTICATION=false`. |
 
-For a self-hosted instance (e.g. the `searxng-firecrawl` stack in
-`shockwaves-lab`):
+The default target is the Firecrawl instance from
+`shockwaves-lab/searxng-firecrawl`, which also provides SearXNG for
+`firecrawl_search`. Point it somewhere else at runtime:
 
 ```bash
-export FIRECRAWL_API_URL=http://firecrawl.nemesis.home.arpa
-export FIRECRAWL_API_KEY=dummy   # self-hosted with USE_DB_AUTHENTICATION=false
+export FIRECRAWL_API_URL=http://localhost:3002
+pi
 ```
 
-Then run `pi` and use tools like `firecrawl_scrape` and `firecrawl_search`.
-Inside a session, `/firecrawl` reports the configured API URL and whether a key
-is present.
+Then use the `firecrawl_scrape` and `firecrawl_search` tools inside a session.
 
-## Updating the packed extension
+## Updating the vendored extension
 
-Bump the `rev` and both hashes in `flake.nix`:
+The source of truth for the extension is
+`shockwaves-lab/searxng-firecrawl/firecrawl.pi-extension.ts`. To sync a change,
+copy it over (keeping the self-hosted default URL) and rebuild:
 
 ```bash
-nix-prefetch-github firecrawl pi-firecrawl --rev <new-rev>
-# update rev + hash, then:
-nix build .#pi-firecrawl   # -> prints the new npmDepsHash on mismatch
+cp /path/to/searxng-firecrawl/firecrawl.pi-extension.ts extensions/firecrawl.ts
+nix build .#pi-firecrawl
 ```
