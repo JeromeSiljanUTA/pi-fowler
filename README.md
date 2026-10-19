@@ -22,29 +22,29 @@ map, search, and extract from the web out of the box.
 - The upstream `src/index.ts` entry point is relocated to
   `extensions/firecrawl.ts`, so pi lists the extension as `firecrawl.ts`
   rather than the unhelpful `src/index.ts`.
-- The `pi` binary is wrapped to inject `--extension <pi-firecrawl>` on every
-  invocation. This leaves your writable `~/.pi/agent` directory (settings,
-  sessions, auth) untouched, unlike overriding `PI_CODING_AGENT_DIR`.
+- The `pi` binary is wrapped so that `PI_CODING_AGENT_DIR` points at a
+  version-controlled `agent/` directory instead of `~/.pi/agent`, and so that
+  `--extension <pi-firecrawl>` is injected on every invocation.
 
 ## Usage
 
 Run it directly:
 
 ```bash
-nix run git+ssh://git@your-git-server/pi-fowler
+nix run http://git.nemesis.home.arpa/jerome/pi-fowler
 ```
 
 Build / install it:
 
 ```bash
-nix build git+ssh://git@your-git-server/pi-fowler
+nix build http://git.nemesis.home.arpa/jerome/pi-fowler
 ```
 
 As a flake input in a NixOS / home-manager config:
 
 ```nix
 {
-  inputs.pi-fowler.url = "git+ssh://git@your-git-server/pi-fowler";
+  inputs.pi-fowler.url = "http://git.nemesis.home.arpa/jerome/pi-fowler";
 
   # home-manager
   home.packages = [ inputs.pi-fowler.packages.${pkgs.system}.default ];
@@ -55,9 +55,32 @@ As a flake input in a NixOS / home-manager config:
 }
 ```
 
-## Configuration
+## Version-controlled configuration
 
-The extension reads these environment variables at runtime:
+The agent's config and memory live with the pi-fowler checkout instead of
+`~/.pi/agent`:
+
+```
+agent/
+├── settings.json   # default provider/model, theme, and other settings
+└── AGENTS.md       # persistent memory and instructions
+```
+
+`PI_CODING_AGENT_DIR` is set to `$HOME/pi-fowler/agent`, so clone the repo to
+`~/pi-fowler` and pi reads and writes its config there. Anything pi changes
+shows up in `git status` for you to commit and push.
+
+Point somewhere else with `PI_FOWLER_AGENT_DIR`:
+
+```bash
+export PI_FOWLER_AGENT_DIR="$HOME/git/pi-fowler/agent"
+```
+
+Credentials, model cache, sessions, and logs are listed in `.gitignore`, so
+`agent/auth.json`, `agent/models-store.json`, `agent/sessions/`, and
+`agent/*.log` are never committed.
+
+## Firecrawl configuration
 
 | Variable | Default | Purpose |
 |---|---|---|

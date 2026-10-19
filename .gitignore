@@ -1,3 +1,9 @@
 result
 result-*
 .direnv/
+
+# Pi runtime state that must never be committed with the versioned config.
+agent/auth.json
+agent/models-store.json
+agent/sessions/
+agent/*.log

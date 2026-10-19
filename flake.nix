@@ -9,26 +9,16 @@
   }: let
     systems = ["x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"];
     forAllSystems = f:
-      nixpkgs.lib.genAttrs systems (system: f {
-        inherit system;
-        pkgs = import nixpkgs {
+      nixpkgs.lib.genAttrs systems (system:
+        f {
           inherit system;
-          config.allowUnfree = true;
-        };
-      });
+          pkgs = import nixpkgs {
+            inherit system;
+            config.allowUnfree = true;
+          };
+        });
   in {
     packages = forAllSystems ({pkgs, ...}: let
-      # -----------------------------------------------------------------
-      # pi-firecrawl — official Firecrawl extension for pi
-      #
-      # Shipped as TypeScript source; pi's jiti loader reads the entry file
-      # directly, so we only need to install the package together with its
-      # runtime dependency (@mendable/firecrawl-js).
-      #
-      # The upstream entry lives at src/index.ts, which pi displays as the
-      # extension name "src/index.ts". Relocate it to extensions/firecrawl.ts
-      # so the extension is listed as "firecrawl.ts" instead.
-      # -----------------------------------------------------------------
       pi-firecrawl = pkgs.buildNpmPackage {
         pname = "pi-firecrawl";
         version = "0.1.0";
@@ -72,26 +62,23 @@
         };
       };
 
-      # -----------------------------------------------------------------
-      # pi-fowler — pi with the Firecrawl extension loaded on every run
-      #
-      # We wrap `pi` and inject `-e <pi-firecrawl>` rather than replacing the
-      # agent directory, so the user's writable ~/.pi/agent (settings,
-      # sessions, auth) keeps working normally.
-      # -----------------------------------------------------------------
-      pi-fowler = pkgs.symlinkJoin {
-        name = "pi-fowler-${pkgs.pi-coding-agent.version}";
-        paths = [pkgs.pi-coding-agent];
-        nativeBuildInputs = [pkgs.makeWrapper];
-        postBuild = ''
-          wrapProgram $out/bin/pi \
-            --prefix PATH : ${pkgs.lib.makeBinPath [pkgs.nodejs]} \
-            --add-flags "--extension ${pi-firecrawl}/lib/node_modules/pi-firecrawl"
+      pi-fowler = pkgs.writeShellApplication {
+        name = "pi";
+        runtimeInputs = [pkgs.nodejs];
+        text = ''
+          export PI_CODING_AGENT_DIR="''${PI_FOWLER_AGENT_DIR:-$HOME/pi-fowler/agent}"
+
+          exec ${pkgs.pi-coding-agent}/bin/pi \
+            --extension ${pi-firecrawl}/lib/node_modules/pi-firecrawl \
+            "$@"
         '';
 
-        meta = pkgs.pi-coding-agent.meta // {
-          description = "Pi coding agent with the Firecrawl extension preinstalled";
-        };
+        meta =
+          pkgs.pi-coding-agent.meta
+          // {
+            description = "Pi coding agent with the Firecrawl extension preinstalled and a version-controlled agent directory";
+            mainProgram = "pi";
+          };
       };
     in {
       default = pi-fowler;
