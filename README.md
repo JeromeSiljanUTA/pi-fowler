@@ -19,6 +19,9 @@ map, search, and extract from the web out of the box.
 - `pi-coding-agent` is taken from `nixpkgs/nixos-unstable`.
 - `firecrawl/pi-firecrawl` is fetched from GitHub and installed with its
   runtime dependency (`@mendable/firecrawl-js`).
+- The upstream `src/index.ts` entry point is relocated to
+  `extensions/firecrawl.ts`, so pi lists the extension as `firecrawl.ts`
+  rather than the unhelpful `src/index.ts`.
 - The `pi` binary is wrapped to inject `--extension <pi-firecrawl>` on every
   invocation. This leaves your writable `~/.pi/agent` directory (settings,
   sessions, auth) untouched, unlike overriding `PI_CODING_AGENT_DIR`.

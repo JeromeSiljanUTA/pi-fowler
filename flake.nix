@@ -21,9 +21,13 @@
       # -----------------------------------------------------------------
       # pi-firecrawl — official Firecrawl extension for pi
       #
-      # Shipped as TypeScript source; pi's jiti loader reads src/index.ts
+      # Shipped as TypeScript source; pi's jiti loader reads the entry file
       # directly, so we only need to install the package together with its
       # runtime dependency (@mendable/firecrawl-js).
+      #
+      # The upstream entry lives at src/index.ts, which pi displays as the
+      # extension name "src/index.ts". Relocate it to extensions/firecrawl.ts
+      # so the extension is listed as "firecrawl.ts" instead.
       # -----------------------------------------------------------------
       pi-firecrawl = pkgs.buildNpmPackage {
         pname = "pi-firecrawl";
@@ -48,6 +52,16 @@
           runHook preInstall
           mkdir -p $out/lib/node_modules/pi-firecrawl
           cp -r . $out/lib/node_modules/pi-firecrawl
+
+          cd $out/lib/node_modules/pi-firecrawl
+          mkdir -p extensions
+          mv src/index.ts extensions/firecrawl.ts
+          rmdir src
+
+          substituteInPlace package.json \
+            --replace-fail '"./src/index.ts"' '"./extensions/firecrawl.ts"' \
+            --replace-fail '"src",' '"extensions",'
+
           runHook postInstall
         '';
 
