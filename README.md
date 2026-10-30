@@ -1,5 +1,11 @@
 # pi-fowler
 
+| ![Special Agent William Fowler](agent-fowler.jpg) | ![Agent Fowler in action](agent-fowler-topgun.jpg) |
+|:--:|:--:|
+| Special Agent William "Bill" Fowler | Fowler tangling with Decepticons |
+
+<sub>Screenshots from *Transformers: Prime*.</sub>
+
 A Nix flake that packages the **pi coding agent** (latest unstable) with a
 **self-hosted Firecrawl extension** baked in, wired to the Firecrawl + SearXNG
 stack in `shockwaves-lab/searxng-firecrawl`. No Firecrawl API key is required.
