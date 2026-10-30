@@ -48,11 +48,60 @@
         JSON
       '';
 
+      # Default files seeded into a brand-new agent directory. Existing files
+      # are never overwritten, so user changes survive upgrades.
+      pi-fowler-agent-defaults = pkgs.runCommand "pi-fowler-agent-defaults" {} ''
+        mkdir -p $out
+        cp ${./agent/AGENTS.md} $out/AGENTS.md
+        cp ${./agent/settings.json} $out/settings.json
+      '';
+
       pi-fowler = pkgs.writeShellApplication {
         name = "pi";
-        runtimeInputs = [pkgs.nodejs];
+        runtimeInputs = [pkgs.nodejs pkgs.coreutils pkgs.gnugrep];
         text = ''
-          export PI_CODING_AGENT_DIR="''${PI_FOWLER_AGENT_DIR:-$HOME/pi-fowler/agent}"
+          is_pi_fowler_checkout() {
+            [ -f "$1/flake.nix" ] &&
+              [ -d "$1/agent" ] &&
+              grep -q 'pi-fowler' "$1/flake.nix"
+          }
+
+          find_checkout() {
+            local candidate
+            for candidate in \
+              "$PWD" \
+              "$PWD/pi-fowler" \
+              "$PWD/../pi-fowler" \
+              "/workspace/pi-fowler" \
+              "$HOME/pi-fowler"; do
+              if is_pi_fowler_checkout "$candidate"; then
+                printf '%s\n' "$candidate"
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          # Prefer an explicit override, then a nearby pi-fowler checkout. This
+          # is what makes settings persistent in HARBINGER: the checkout lives
+          # on the always-mounted /workspace share rather than in the VM's
+          # ephemeral home directory.
+          if [ -n "''${PI_FOWLER_AGENT_DIR:-}" ]; then
+            agent_dir="$PI_FOWLER_AGENT_DIR"
+          elif checkout="$(find_checkout)"; then
+            agent_dir="$checkout/agent"
+          else
+            agent_dir="$HOME/pi-fowler/agent"
+          fi
+
+          mkdir -p "$agent_dir"
+          for file in AGENTS.md settings.json; do
+            if [ ! -e "$agent_dir/$file" ]; then
+              cp "${pi-fowler-agent-defaults}/$file" "$agent_dir/$file"
+            fi
+          done
+
+          export PI_CODING_AGENT_DIR="$agent_dir"
 
           # Point the Firecrawl extension at the self-hosted instance. An
           # explicitly exported FIRECRAWL_API_URL is respected.

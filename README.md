@@ -68,7 +68,7 @@ As a flake input in a NixOS / home-manager config:
 
 ## Version-controlled configuration
 
-The agent's config and memory live with the pi-fowler checkout instead of
+The agent's config and memory live with a pi-fowler checkout instead of
 `~/.pi/agent`:
 
 ```
@@ -77,19 +77,33 @@ agent/
 └── AGENTS.md       # persistent memory and instructions
 ```
 
-`PI_CODING_AGENT_DIR` is set to `$HOME/pi-fowler/agent`, so clone the repo to
-`~/pi-fowler` and pi reads and writes its config there. Anything pi changes
-shows up in `git status` for you to commit and push.
+The wrapper looks for a pi-fowler checkout in this order:
+
+1. `PI_FOWLER_AGENT_DIR`, if set.
+2. `$PWD`, `$PWD/pi-fowler`, or `$PWD/../pi-fowler`.
+3. `/workspace/pi-fowler` (the persistent HARBINGER workspace share).
+4. `~/pi-fowler`.
+5. `~/pi-fowler/agent` as a fallback, seeded from the files packaged by the
+   flake.
+
+When it finds a checkout, `PI_CODING_AGENT_DIR` points at that checkout's
+`agent/` directory. That means launching pi from anywhere in HARBINGER still
+uses `/workspace/pi-fowler/agent`: settings persist across VM restarts and
+changes show up in `git status` in the pi-fowler checkout for you to commit and
+push.
+
+`settings.json` and `AGENTS.md` are tracked. Credentials, model cache,
+sessions, and logs are listed in `.gitignore`, so `agent/auth.json`,
+`agent/mcp-auth.json`, `agent/models-store.json`, `agent/sessions/`, and
+`agent/*.log` are never committed. In particular, the OpenRouter key saved by
+`/login` stays in the ignored `agent/auth.json` on the persistent workspace,
+not in git.
 
 Point somewhere else with `PI_FOWLER_AGENT_DIR`:
 
 ```bash
 export PI_FOWLER_AGENT_DIR="$HOME/git/pi-fowler/agent"
 ```
-
-Credentials, model cache, sessions, and logs are listed in `.gitignore`, so
-`agent/auth.json`, `agent/models-store.json`, `agent/sessions/`, and
-`agent/*.log` are never committed.
 
 ## Firecrawl configuration
 
