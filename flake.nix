@@ -27,26 +27,69 @@
       # Vendored extension. It has no npm runtime dependencies (it talks to
       # the Firecrawl HTTP API with fetch and uses pi's bundled peer deps),
       # so it is installed as a plain pi package rather than via npm.
-      pi-firecrawl = pkgs.runCommand "pi-firecrawl-0.2.0" {
+      pi-firecrawl =
+        pkgs.runCommand "pi-firecrawl-0.2.0" {
+          meta = {
+            description = "Firecrawl extension for pi backed by a self-hosted Firecrawl + SearXNG stack";
+            homepage = "https://github.com/firecrawl/pi-firecrawl";
+            license = pkgs.lib.licenses.mit;
+          };
+        } ''
+          mkdir -p $out/lib/node_modules/pi-firecrawl/extensions
+          cp ${./extensions/firecrawl.ts} $out/lib/node_modules/pi-firecrawl/extensions/firecrawl.ts
+
+          cat > $out/lib/node_modules/pi-firecrawl/package.json <<'JSON'
+          {
+            "name": "pi-firecrawl",
+            "version": "0.2.0",
+            "type": "module",
+            "keywords": ["pi-package"],
+            "pi": { "extensions": ["./extensions"] }
+          }
+          JSON
+        '';
+
+      # Built from the pinned dependency tree in nix/pi-subagents. Its bundle
+      # imports its runtime deps (yaml, jiti, ...) with bare specifiers, so the
+      # dependency tree is installed next to the package in lib/node_modules
+      # instead of inside it.
+      pi-subagents = pkgs.buildNpmPackage {
+        pname = "pi-subagents";
+        version = "0.88.1";
+        src = ./nix/pi-subagents;
+        npmDepsHash = "sha256-/dZ+iR6bFVpIxCbf1wVhkS32jyij+LUpIhPHhOMNHNk=";
+        dontNpmBuild = true;
+
+        installPhase = ''
+          mkdir -p $out/lib/node_modules
+          cp -r node_modules/. $out/lib/node_modules/
+        '';
+
         meta = {
-          description = "Firecrawl extension for pi backed by a self-hosted Firecrawl + SearXNG stack";
-          homepage = "https://github.com/firecrawl/pi-firecrawl";
+          description = "Single-agent delegation and scripted multi-agent workflows for pi";
+          homepage = "https://github.com/nicobailon/pi-subagents";
           license = pkgs.lib.licenses.mit;
         };
-      } ''
-        mkdir -p $out/lib/node_modules/pi-firecrawl/extensions
-        cp ${./extensions/firecrawl.ts} $out/lib/node_modules/pi-firecrawl/extensions/firecrawl.ts
+      };
 
-        cat > $out/lib/node_modules/pi-firecrawl/package.json <<'JSON'
-        {
-          "name": "pi-firecrawl",
-          "version": "0.2.0",
-          "type": "module",
-          "keywords": ["pi-package"],
-          "pi": { "extensions": ["./extensions"] }
-        }
-        JSON
-      '';
+      # Has no runtime dependencies, and its non-optional peer dependencies
+      # would pull the whole pi package tree into node_modules, so this takes
+      # the published tarball rather than an npm dependency tree.
+      pi-parallel-sessions =
+        pkgs.runCommand "pi-parallel-sessions-0.2.8" {
+          src = pkgs.fetchurl {
+            url = "https://registry.npmjs.org/pi-parallel-sessions/-/pi-parallel-sessions-0.2.8.tgz";
+            hash = "sha512-w5YIKcWVJIdMs972Xrc0EumNKlB5d4eTs+vuYqYAlfiZjkeBjFb4Iom5XCFOqkxx2EQOmnCVjdLJXaGfkHikfg==";
+          };
+          meta = {
+            description = "Run multiple live sessions in parallel in pi";
+            homepage = "https://github.com/liushihao456/pi-sessions";
+            license = pkgs.lib.licenses.mit;
+          };
+        } ''
+          mkdir -p $out/lib/node_modules/pi-parallel-sessions
+          tar -xzf $src --strip-components=1 -C $out/lib/node_modules/pi-parallel-sessions
+        '';
 
       # Default files seeded into a brand-new agent directory. Existing files
       # are never overwritten, so user changes survive upgrades.
@@ -103,6 +146,14 @@
 
           export PI_CODING_AGENT_DIR="$agent_dir"
 
+          # Repos on the shared /workspace mount are owned by another uid, and
+          # git refuses those as "dubious ownership" when pi runs as root.
+          # Injecting the setting through GIT_CONFIG_* covers every git
+          # subprocess pi spawns without touching the user's ~/.gitconfig.
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=safe.directory
+          export GIT_CONFIG_VALUE_0='*'
+
           # Point the Firecrawl extension at the self-hosted instance. An
           # explicitly exported FIRECRAWL_API_URL is respected.
           : "''${FIRECRAWL_API_URL:=${firecrawlUrl}}"
@@ -110,6 +161,8 @@
 
           exec ${pkgs.pi-coding-agent}/bin/pi \
             --extension ${pi-firecrawl}/lib/node_modules/pi-firecrawl \
+            --extension ${pi-subagents}/lib/node_modules/pi-subagents \
+            --extension ${pi-parallel-sessions}/lib/node_modules/pi-parallel-sessions \
             "$@"
         '';
 
@@ -122,7 +175,7 @@
       };
     in {
       default = pi-fowler;
-      inherit pi-firecrawl pi-fowler;
+      inherit pi-firecrawl pi-fowler pi-parallel-sessions pi-subagents;
     });
 
     overlays.default = final: prev: {

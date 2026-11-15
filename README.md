@@ -14,9 +14,11 @@ stack in `shockwaves-lab/searxng-firecrawl`. No Firecrawl API key is required.
 
 | Output | Description |
 |---|---|
-| `packages.<system>.default` | `pi-fowler` — pi with the Firecrawl extension loaded on every run |
+| `packages.<system>.default` | `pi-fowler` — pi with all extensions loaded on every run |
 | `packages.<system>.pi-fowler` | The wrapped pi binary |
-| `packages.<system>.pi-firecrawl` | The extension package on its own |
+| `packages.<system>.pi-firecrawl` | The Firecrawl extension package on its own |
+| `packages.<system>.pi-subagents` | `pi-subagents` 0.88.1 on its own |
+| `packages.<system>.pi-parallel-sessions` | `pi-parallel-sessions` 0.2.8 on its own |
 
 `overlays.default` exposes `pi-fowler` for use in NixOS / home-manager configs.
 
@@ -33,9 +35,22 @@ stack in `shockwaves-lab/searxng-firecrawl`. No Firecrawl API key is required.
 - The `pi` binary is wrapped so that:
   - `PI_CODING_AGENT_DIR` points at a version-controlled `agent/` directory
     instead of `~/.pi/agent`;
-  - `--extension <pi-firecrawl>` is injected on every invocation;
+  - `--extension` is injected on every invocation for `pi-firecrawl`,
+    `pi-subagents`, and `pi-parallel-sessions`;
   - `FIRECRAWL_API_URL` defaults to the self-hosted instance (an explicitly
-    exported value is respected).
+    exported value is respected);
+  - `safe.directory=*` is exported via `GIT_CONFIG_*`, so git trusts the
+    repos on the shared `/workspace` mount that are owned by another uid
+    instead of failing with "dubious ownership".
+- `pi-subagents` is built with `pkgs.buildNpmPackage` from the pinned
+  dependency tree in `nix/pi-subagents/` (a lockfile plus its `npmDepsHash`),
+  so its runtime dependencies are resolved at build time rather than by
+  `npm install` at launch.
+- `pi-parallel-sessions` has no runtime dependencies, so its published tarball
+  is fetched and unpacked with a pinned hash. It adds the `/sessions` switcher
+  and Ctrl-R.
+- Because every extension comes from the flake, `agent/settings.json` declares
+  no `npm:` packages and pi never touches the npm registry on startup.
 
 ## Usage
 
@@ -93,11 +108,12 @@ changes show up in `git status` in the pi-fowler checkout for you to commit and
 push.
 
 `settings.json` and `AGENTS.md` are tracked. Credentials, model cache,
-sessions, and logs are listed in `.gitignore`, so `agent/auth.json`,
-`agent/mcp-auth.json`, `agent/models-store.json`, `agent/sessions/`, and
-`agent/*.log` are never committed. In particular, the OpenRouter key saved by
-`/login` stays in the ignored `agent/auth.json` on the persistent workspace,
-not in git.
+sessions, logs, and the runtime state written by `pi-subagents` are listed in
+`.gitignore`, so `agent/auth.json`, `agent/mcp-auth.json`,
+`agent/models-store.json`, `agent/sessions/`, `agent/missions/`,
+`agent/pi-subagents/`, and `agent/*.log` are never committed. In particular,
+the OpenRouter key saved by `/login` stays in the ignored `agent/auth.json` on
+the persistent workspace, not in git.
 
 Point somewhere else with `PI_FOWLER_AGENT_DIR`:
 

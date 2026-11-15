@@ -8,3 +8,5 @@ agent/models-store.json
 agent/sessions/
 agent/*.log
 agent/npm/
+agent/missions/
+agent/pi-subagents/

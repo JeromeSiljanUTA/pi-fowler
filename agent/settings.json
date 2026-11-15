@@ -1,10 +1,7 @@
 {
   "$schema": "https://pi.dev/schemas/settings.schema.json",
   "defaultProvider": "openrouter",
-  "defaultModel": "moonshotai/kimi-k2.7-code",
-  "theme": "light",
-  "lastChangelogVersion": "1.5.2",
-  "packages": [
-    "npm:pi-subagents"
-  ]
+  "defaultModel": "deepseek/deepseek-v4.1-flash-1017",
+  "theme": "system",
+  "lastChangelogVersion": "1.5.2"
 }
