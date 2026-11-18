@@ -10,3 +10,4 @@ agent/*.log
 agent/npm/
 agent/missions/
 agent/pi-subagents/
+agent/nix/

@@ -2,6 +2,15 @@
   "$schema": "https://pi.dev/schemas/settings.schema.json",
   "defaultProvider": "openrouter",
   "defaultModel": "deepseek/deepseek-v4.1-flash-1017",
-  "theme": "system",
-  "lastChangelogVersion": "1.5.2"
+  "theme": "light/dark",
+  "lastChangelogVersion": "1.5.2",
+  "hideThinkingBlock": true,
+  "packages": [
+    "./nix/packages/pi-firecrawl",
+    "./nix/packages/pi-subagents",
+    "./nix/packages/pi-parallel-sessions"
+  ],
+  "extensionChangelogVersions": {
+    "{\"source\":\"./nix/packages/pi-subagents\",\"scope\":\"user\"}": "0.88.1"
+  }
 }

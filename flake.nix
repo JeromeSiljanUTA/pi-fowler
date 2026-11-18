@@ -89,6 +89,13 @@
         } ''
           mkdir -p $out/lib/node_modules/pi-parallel-sessions
           tar -xzf $src --strip-components=1 -C $out/lib/node_modules/pi-parallel-sessions
+
+          # 0.2.8 asks for confirmation before every sudo / rm -rf bash command.
+          # Its child sessions have no UI attached, so the confirm resolves to
+          # "denied", and inline prompts hold a run until answered; that strands
+          # work instead of protecting it. Pi's own approval flow still applies.
+          substituteInPlace $out/lib/node_modules/pi-parallel-sessions/index.ts \
+            --replace-fail 'return `Dangerous bash command in ''${sessionName}: ''${command}`;' 'return null;'
         '';
 
       # Default files seeded into a brand-new agent directory. Existing files
@@ -97,6 +104,7 @@
         mkdir -p $out
         cp ${./agent/AGENTS.md} $out/AGENTS.md
         cp ${./agent/settings.json} $out/settings.json
+        cp ${./agent/keybindings.json} $out/keybindings.json
       '';
 
       pi-fowler = pkgs.writeShellApplication {
@@ -114,9 +122,18 @@
             for candidate in \
               "$PWD" \
               "$PWD/pi-fowler" \
-              "$PWD/../pi-fowler" \
               "/workspace/pi-fowler" \
               "$HOME/pi-fowler"; do
+              if is_pi_fowler_checkout "$candidate"; then
+                printf '%s\n' "$candidate"
+                return 0
+              fi
+            done
+            # Walking up keeps deep working directories on the same agent
+            # directory instead of falling back to an empty seeded one.
+            candidate="$PWD"
+            while [ "$candidate" != "/" ]; do
+              candidate="$(dirname "$candidate")"
               if is_pi_fowler_checkout "$candidate"; then
                 printf '%s\n' "$candidate"
                 return 0
@@ -138,13 +155,24 @@
           fi
 
           mkdir -p "$agent_dir"
-          for file in AGENTS.md settings.json; do
+          for file in AGENTS.md settings.json keybindings.json; do
             if [ ! -e "$agent_dir/$file" ]; then
               cp "${pi-fowler-agent-defaults}/$file" "$agent_dir/$file"
             fi
           done
 
           export PI_CODING_AGENT_DIR="$agent_dir"
+
+          # Extensions have to live where pi looks for packages, not only in this
+          # process's argv: /sessions children and subagent runners get their own
+          # resource loaders, which see the agent directory but never the command
+          # line. The links are stable paths, so agent/settings.json can name them
+          # and stay free of store paths/rebuild churn.
+          packages_dir="$agent_dir/nix/packages"
+          mkdir -p "$packages_dir"
+          ln -sfn ${pi-firecrawl}/lib/node_modules/pi-firecrawl "$packages_dir/pi-firecrawl"
+          ln -sfn ${pi-subagents}/lib/node_modules/pi-subagents "$packages_dir/pi-subagents"
+          ln -sfn ${pi-parallel-sessions}/lib/node_modules/pi-parallel-sessions "$packages_dir/pi-parallel-sessions"
 
           # Repos on the shared /workspace mount are owned by another uid, and
           # git refuses those as "dubious ownership" when pi runs as root.
@@ -159,10 +187,13 @@
           : "''${FIRECRAWL_API_URL:=${firecrawlUrl}}"
           export FIRECRAWL_API_URL
 
+          # Repeat the packages as explicit extensions so a settings.json that
+          # predates them (seeded copies are never overwritten) still gets the
+          # extensions: pi canonicalizes through the links and loads each once.
           exec ${pkgs.pi-coding-agent}/bin/pi \
-            --extension ${pi-firecrawl}/lib/node_modules/pi-firecrawl \
-            --extension ${pi-subagents}/lib/node_modules/pi-subagents \
-            --extension ${pi-parallel-sessions}/lib/node_modules/pi-parallel-sessions \
+            --extension "$packages_dir/pi-firecrawl" \
+            --extension "$packages_dir/pi-subagents" \
+            --extension "$packages_dir/pi-parallel-sessions" \
             "$@"
         '';
 

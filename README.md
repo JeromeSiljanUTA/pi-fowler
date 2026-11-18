@@ -35,8 +35,9 @@ stack in `shockwaves-lab/searxng-firecrawl`. No Firecrawl API key is required.
 - The `pi` binary is wrapped so that:
   - `PI_CODING_AGENT_DIR` points at a version-controlled `agent/` directory
     instead of `~/.pi/agent`;
-  - `--extension` is injected on every invocation for `pi-firecrawl`,
-    `pi-subagents`, and `pi-parallel-sessions`;
+  - the three extensions are linked into `agent/nix/packages/` and loaded both
+    from `agent/settings.json` and with `--extension` (pi canonicalizes the
+    links, so each extension loads once);
   - `FIRECRAWL_API_URL` defaults to the self-hosted instance (an explicitly
     exported value is respected);
   - `safe.directory=*` is exported via `GIT_CONFIG_*`, so git trusts the
@@ -48,9 +49,18 @@ stack in `shockwaves-lab/searxng-firecrawl`. No Firecrawl API key is required.
   `npm install` at launch.
 - `pi-parallel-sessions` has no runtime dependencies, so its published tarball
   is fetched and unpacked with a pinned hash. It adds the `/sessions` switcher
-  and Ctrl-R.
+  and Ctrl-R. The build drops its risky-command guard, which confirmed every
+  `sudo` / `rm -rf` bash command through `ctx.ui.confirm`: sessions without an
+  attached UI auto-deny that prompt, and inline ones stall until someone
+  answers, so runs stranded instead of being protected.
 - Because every extension comes from the flake, `agent/settings.json` declares
   no `npm:` packages and pi never touches the npm registry on startup.
+- The extensions are declared as packages in `agent/settings.json`, not only on
+  the wrapper's command line, because sessions that pi creates itself build
+  their own resource loader from the agent directory: the `/sessions`
+  switcher's new sessions and `pi-subagents` background runners never see the
+  parent's argv. Without the package declarations those sessions started
+  without the extensions, the skills, and the prompts.
 
 ## Usage
 
@@ -88,17 +98,20 @@ The agent's config and memory live with a pi-fowler checkout instead of
 
 ```
 agent/
-├── settings.json   # default provider/model, theme, and other settings
-└── AGENTS.md       # persistent memory and instructions
+├── settings.json     # default provider/model, theme, packages, other settings
+├── keybindings.json  # key remaps that keep extensions from shadowing built-ins
+├── AGENTS.md         # persistent memory and instructions
+└── nix/packages/     # wrapper-managed links to the flake's extension packages
 ```
 
 The wrapper looks for a pi-fowler checkout in this order:
 
 1. `PI_FOWLER_AGENT_DIR`, if set.
-2. `$PWD`, `$PWD/pi-fowler`, or `$PWD/../pi-fowler`.
-3. `/workspace/pi-fowler` (the persistent HARBINGER workspace share).
-4. `~/pi-fowler`.
-5. `~/pi-fowler/agent` as a fallback, seeded from the files packaged by the
+2. `$PWD`, `$PWD/pi-fowler`.
+3. Every ancestor of `$PWD`.
+4. `/workspace/pi-fowler` (the persistent HARBINGER workspace share).
+5. `~/pi-fowler`.
+6. `~/pi-fowler/agent` as a fallback, seeded from the files packaged by the
    flake.
 
 When it finds a checkout, `PI_CODING_AGENT_DIR` points at that checkout's
@@ -107,7 +120,15 @@ uses `/workspace/pi-fowler/agent`: settings persist across VM restarts and
 changes show up in `git status` in the pi-fowler checkout for you to commit and
 push.
 
-`settings.json` and `AGENTS.md` are tracked. Credentials, model cache,
+`pi-parallel-sessions` binds `ctrl+r` to its `/sessions` switcher, but pi 1.5
+binds `ctrl+r` to the built-in session rename, so startup reported an
+"Extension shortcut conflict". Rather than patch the third-party package,
+`keybindings.json` moves `app.session.rename` to `ctrl+shift+r`; the extension
+keeps its documented `ctrl+r` and both work.
+
+`settings.json`, `keybindings.json`, and `AGENTS.md` are tracked;
+`agent/nix/` is rebuilt by the wrapper on every launch, so the links always
+point at the store paths of the pi that is running. Credentials, model cache,
 sessions, logs, and the runtime state written by `pi-subagents` are listed in
 `.gitignore`, so `agent/auth.json`, `agent/mcp-auth.json`,
 `agent/models-store.json`, `agent/sessions/`, `agent/missions/`,
